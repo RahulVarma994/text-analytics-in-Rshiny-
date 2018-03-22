@@ -1,0 +1,103 @@
+---
+author: "RAHUL VARMA"
+title: "Unstructured Quiz"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: sandstone 
+---
+
+```{r setup, include=FALSE}
+require(flexdashboard)
+require(dplyr)
+require(ggplot2)
+require(highcharter)
+require(viridisLite)
+require(forecast)
+require(treemap)
+require(maps)
+require(ggmap)
+require(googleVis)
+require(DT)
+require(plotly)
+require(tm)
+require(wordcloud)
+require(RWeka)
+review=read.csv("hotstar.allreviews_Sentiments.csv",header = TRUE)
+```
+
+UNIGRAM
+==================================
+
+```{r}
+plotOutput("unigram")
+```
+
+```{r}
+docs_review = VCorpus(VectorSource(na.omit(review$Reviews)))
+review_corpus_clean = tm_map(docs_review, content_transformer(tolower))#converting to lower case
+review_corpus_clean = tm_map(review_corpus_clean, removeWords, stopwords())#removing stopwords
+apply_regex = function(x) gsub('[^a-z ]','',x)#applying regular expressions
+review_corpus_clean = tm_map(review_corpus_clean,content_transformer(apply_regex))
+review_corpus_clean = tm_map(review_corpus_clean, stemDocument)#stemming
+col_pals = brewer.pal.info   
+palette_choice = rownames(col_pals)
+observe({
+#removing custom stopwords
+output$unigram =renderPlot({
+custom_stop_words = c("hotstar")
+stop_words = unlist(strsplit(input$cust_stop_words,","))
+custom_stop_words = append(custom_stop_words,stop_words)
+review_corpus_clean = tm_map(review_corpus_clean, removeWords, custom_stop_words)
+doc_term_mat = DocumentTermMatrix(review_corpus_clean)
+doc_term_mat_df= as.data.frame(as.matrix(doc_term_mat))
+#columnwise  bag of words
+bagofwords = data.frame(sort(colSums(as.matrix(doc_term_mat)),decreasing = TRUE))
+bagofwords$words = rownames(bagofwords)
+names(bagofwords)= c("freq","words")
+bow_top100 = head(bagofwords,100)
+#wordclouds
+wordcloud(bow_top100$words,bow_top100$freq,min.freq = 1,max.words = input$words_num,random.order=FALSE, rot.per=0.35)
+})
+})
+
+```
+
+
+Sidebar {.sidebar}
+=======================================
+```{r}
+sliderInput(inputId = "words_num", label = "choose the Number of words to be viewed in word cloud", min = 0, max=100, value = 50)
+textInput(inputId = "cust_stop_words", label = "Enter Custom Stopwords Separated by comma")
+
+selectInput(inputId = "colpal", label = "Choose Color Scheme", choices = palette_choice)
+```
+
+BIGRAM
+=======================================
+
+
+```{r}
+plotOutput("Bigram")
+```
+
+
+```{r}
+##Bigram
+observe({
+output$Bigram =renderPlot({
+BigramTokenizer<-function(x) NGramTokenizer(x,Weka_control(min=2,max=2))
+doc_term_mat_bigram=DocumentTermMatrix(review_corpus_clean,control = list(tokenize=BigramTokenizer))
+df_btm_bigram=as.data.frame(as.matrix(doc_term_mat_bigram))
+##Bigram Bag of words
+bow_bigram=sort(colSums(df_btm_bigram),decreasing = T)
+bow_bigram=as.data.frame(bow_bigram)
+bow_bigram$words=rownames(bow_bigram)
+names(bow_bigram)=c('Freq','words')
+##Bigram Word Cloud
+bow_top_bigram=head(bow_bigram,50)
+wordcloud(bow_top_bigram$words,bow_top_bigram$Freq,min.freq = 1,max.words = input$words_num,random.order=FALSE, rot.per=0.35)
+})
+})
+```
